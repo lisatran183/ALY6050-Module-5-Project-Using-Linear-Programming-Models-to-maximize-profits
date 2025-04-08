@@ -1,0 +1,207 @@
+---
+title: "Module 5 Project: Using Linear Programming Models to maximize profits"
+author: "Thuy Nhu Thao Tran"
+output: 
+  pdf_document: 
+    latex_engine: xelatex
+---
+
+# Introduction
+
+# 1. Mathematical formulation of the problem
+
+First of all, I calculated **the total warehouse space** is **2460ft** because:
+
+\- The warehouse has 82 shelves.
+
+\- Each shelf is 30 ft long and 5 ft wide.
+
+-\> 82 x 30 = 2460ft
+
+I define decision variables:
+
+\- x1: Number of Pressure Washers purchased
+
+\- x2: Number of Go Karts purchased
+
+\- x3: Number of Generators purchased
+
+\- x4: Number of Water Pump cases purchased
+
+Objective Function (Maximize Net Profit):
+
+maxZ = (499.99x1 + 729.99x2 + 700.99x3 + 269.99x4)−(330x1 + 370x2 + 410x3 + 635x4)
+
+**-\> maxZ = 169.99x1 + 359.99x2 + 290.99x3 − 365.01x4**
+
+Constraints:
+
+-   Budget constraint (Cannot exceed \$170,000): 330x1 + 370x2 + 410x3 + 635x4 =\<170000
+
+-   Warehouse space constraint (Total available: 2460 ft): 5x1 + 8x2 + 5x3 + 1.25x4 =\< 2460
+
+-   Inventory allocation constraint (At least 30% must be pressure washers and go-karts):
+
+    x1 + x2 \>= 0.3(x1 + x2 + x3 + x4)
+
+-   Sales ratio constraint (Generators must be at least twice the water pumps): x3 \>= 2x4
+
+-   Non-negativity constraints: x1, x2, x3, x4 \>= 0
+
+# 2. Set up the linear programming formulation in R, 3. Use R to solve the problem, and generate a sensitivity report.
+
+Then, I use lpSolve package in R to set up and solve the model.
+
+```{r}
+# Load the required package
+library(lpSolve)
+
+# Define cost and revenue
+costs <- c(330, 370, 410, 635)
+revenues <- c(499.99, 729.99, 700.99, 269.99)
+
+# Profit per unit
+profit <- revenues - costs
+
+# Constraints
+## Budget constraint
+budget <- 170000
+
+## Warehouse space constraint (Total available: 2460 ft)
+space_per_item <- c(5, 8, 5, 5/4)  # Water pumps case occupies 1.25 ft
+warehouse_capacity <- 2460
+
+## Inventory allocation constraint (30% allocated to pressure washers and go-karts)
+## x1 + x2 >= 0.3 * (x1 + x2 + x3 + x4)
+
+## Sales ratio constraint (Generators must be at least 2 times water pumps)
+## x3 >= 2 * x4
+
+# Coefficients matrix
+constraints <- matrix(
+  c(330, 370, 410, 635,      # Budget constraint
+    5, 8, 5, 5/4,           # Warehouse space constraint
+    0.7, 0.7, -0.3, -0.3,   # Inventory allocation
+    0, 0, 1, -2),           # Sales ratio constraint
+  nrow = 4, byrow = TRUE
+)
+
+# Right-hand side values for constraints
+rhs <- c(budget, warehouse_capacity, 0, 0)
+
+# Constraint directions
+constraints_dir <- c("<=", "<=", ">=", ">=")
+
+# Solve the LP model
+solution <- lp(
+  direction = "max",  # Maximization problem
+  objective.in = profit,
+  const.mat = constraints,
+  const.dir = constraints_dir,
+  const.rhs = rhs,
+  all.int = TRUE  # Ensure integer values
+)
+
+# Display results
+cat("Optimal Solution:")
+print(solution$solution)  # Number of items to purchase
+cat("\nMaximum Profit: ", solution$objval)
+
+```
+
+# 4. Describe the optimal solutions
+
+With the output above, we can see that:
+
+\- Optimal Solution:
+
+-   Pressure Washers (x1): 1 unit
+
+-   Go-Karts (x2): 125 units
+
+-   Generators (x3): 291 units
+
+-   Water Pump Cases (x4): 0 units
+
+\- Maximum Profit: 129846.8
+
+**Why is x4 zero?** Answer: A zero value in a linear programming solution means it is not profitable or not feasible to purchase water pumps. This could be due to:
+
+1.  Low profitability
+
+-   Water pumps have a negative profit per unit: 269.99 - 635 = -365.01
+-   Since selling water pumps causes a loss, the model does not include them.
+
+2.  Budget Constraints:
+
+-   Higher-profit items could make greater use of the budget or warehousing.
+-   Due to their larger revenues, the model gives priority to go-karts and generators.
+
+3.  Impact of Sales Ratio Constraint:
+
+-   Selling water pumps compels us to have additional generators on hand since generators must be at least twice as large as water pumps.
+-   Since this might waste money and space, it would be best to fully avoid using water pumps.
+
+# 5. Use the sensitivity report to determine the smallest selling price
+
+```{r}
+# Sensitivity Analysis (Shadow Prices and Reduced Costs)
+print(solution$reducedcost)
+```
+
+Because the output I got is NULL, I will calculate the smallest selling price manually. Then, I used the table below to compare x4 with the most profitable item (generators, x3) to estimate the required price.
+
+| Item | Cost | Selling price | Profit  |
+|------|------|---------------|---------|
+| x3   | 410  | 700.99        | 290.99  |
+| x4   | 635  | 269.99        | -365.01 |
+
+**Estimate Minimum Selling Price for x4:**
+
+New Selling Price of x₄ = Cost + Profit of Most Profitable Item
+
+= 635 + 290.99 = 925.99
+
+```{r}
+revenues[4] <- 925.99  # Increase water pump price
+profit <- revenues - costs  # Recalculate profit per unit
+```
+
+Re-run the LP model:
+
+```{r}
+solution <- lp(
+  direction = "max",
+  objective.in = profit,
+  const.mat = constraints,
+  const.dir = constraints_dir,
+  const.rhs = rhs,
+  all.int = TRUE
+)
+
+print(solution$solution)  # Check if x₄ is now included
+cat("\nNew Maximum Profit: ", solution$objval)
+
+```
+
+# 6.
+
+```{r}
+print(solution$duals)
+```
+
+Since the shadow price is 0, this tells us:
+
+\- The company already has enough budget to buy the most profitable combination of products.
+
+\- More money won’t change the optimal solution because the company cannot store or sell more products under the current constraints.
+
+# 7.
+
+Since the shadow price is 0, this tells us:
+
+\- The company's potential to optimize profit is not limited by warehouse area.
+
+\- Changing the warehouse's size will not change the optimal solution or profit.
+
+\- It is not necessary for the company to lease a bigger warehouse.
